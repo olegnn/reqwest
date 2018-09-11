@@ -23,7 +23,7 @@ impl Form {
     /// Creates a new Form without any content.
     pub fn new() -> Form {
         Form {
-            boundary: format!("{}", Uuid::new_v4().simple()),
+            boundary: format!("{}", Uuid::new_v4().to_simple()),
             fields: Vec::new(),
             headers: Vec::new(),
         }
@@ -191,8 +191,15 @@ impl Part {
         }
     }
 
-    /// Sets the mime, builder style.
-    pub fn mime(mut self, mime: Mime) -> Part {
+    /// Tries to set the mime of this part.
+    pub fn mime_str(mut self, mime: &str) -> ::Result<Part> {
+        self.mime = Some(try_!(mime.parse()));
+        Ok(self)
+    }
+
+    // Re-enable when mime 0.4 is available, with split MediaType/MediaRange.
+    #[cfg(test)]
+    fn mime(mut self, mime: Mime) -> Part {
         self.mime = Some(mime);
         self
     }

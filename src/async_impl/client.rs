@@ -12,8 +12,8 @@ use native_tls::{TlsConnector, TlsConnectorBuilder};
 
 
 use super::body;
-use super::request::{self, Request, RequestBuilder};
-use super::response::{self, Response};
+use super::request::{Request, RequestBuilder};
+use super::response::Response;
 use connect::Connector;
 use into_url::to_uri;
 use redirect::{self, RedirectPolicy, remove_sensitive_headers};
@@ -29,7 +29,6 @@ static DEFAULT_USER_AGENT: &'static str =
 ///
 /// The `Client` holds a connection pool internally, so it is advised that
 /// you create one and **reuse** it.
-
 #[derive(Clone)]
 pub struct Client {
     inner: Arc<ClientRef>,
@@ -296,7 +295,7 @@ impl Client {
             Ok(url) => Ok(Request::new(method, url)),
             Err(err) => Err(::error::from(err)),
         };
-        request::builder(self.clone(), req)
+        RequestBuilder::new(self.clone(), req)
     }
 
     /// Executes a `Request`.
@@ -322,7 +321,7 @@ impl Client {
             url,
             user_headers,
             body
-        ) = request::pieces(req);
+        ) = req.pieces();
 
         let mut headers = self.inner.headers.clone(); // default headers
         for (key, value) in user_headers.iter() {
@@ -408,7 +407,7 @@ enum PendingInner {
     Error(Option<::Error>),
 }
 
-pub struct PendingRequest {
+struct PendingRequest {
     method: Method,
     url: Url,
     headers: HeaderMap,
@@ -421,6 +420,13 @@ pub struct PendingRequest {
     in_flight: ResponseFuture,
 }
 
+impl Pending {
+    pub(super) fn new_err(err: ::Error) -> Pending {
+        Pending {
+            inner: PendingInner::Error(Some(err)),
+        }
+    }
+}
 
 impl Future for Pending {
     type Item = Response;
@@ -516,7 +522,7 @@ impl Future for PendingRequest {
                     debug!("Location header had invalid URI: {:?}", e);
                 }
             }
-            let res = response::new(res, self.url.clone(), self.client.gzip);
+            let res = Response::new(res, self.url.clone(), self.client.gzip);
             return Ok(Async::Ready(res));
         }
     }
@@ -552,10 +558,3 @@ fn make_referer(next: &Url, previous: &Url) -> Option<HeaderValue> {
     referer.as_str().parse().ok()
 }
 
-// pub(crate)
-
-pub fn pending_err(err: ::Error) -> Pending {
-    Pending {
-        inner: PendingInner::Error(Some(err)),
-    }
-}
