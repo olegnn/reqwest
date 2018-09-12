@@ -113,6 +113,7 @@ impl Error {
         match self.kind {
             Kind::Http(ref e) => Some(e),
             Kind::Hyper(ref e) => Some(e),
+            Kind::Mime(ref e) => Some(e),
             Kind::Url(ref e) => Some(e),
             Kind::Tls(ref e) => Some(e),
             Kind::Io(ref e) => Some(e),
@@ -194,6 +195,7 @@ impl fmt::Display for Error {
         match self.kind {
             Kind::Http(ref e) => fmt::Display::fmt(e, f),
             Kind::Hyper(ref e) => fmt::Display::fmt(e, f),
+            Kind::Mime(ref e) => fmt::Display::fmt(e, f),
             Kind::Url(ref e) => fmt::Display::fmt(e, f),
             Kind::Tls(ref e) => fmt::Display::fmt(e, f),
             Kind::Io(ref e) => fmt::Display::fmt(e, f),
@@ -219,6 +221,7 @@ impl StdError for Error {
         match self.kind {
             Kind::Http(ref e) => e.description(),
             Kind::Hyper(ref e) => e.description(),
+            Kind::Mime(ref e) => e.description(),
             Kind::Url(ref e) => e.description(),
             Kind::Tls(ref e) => e.description(),
             Kind::Io(ref e) => e.description(),
@@ -236,6 +239,7 @@ impl StdError for Error {
         match self.kind {
             Kind::Http(ref e) => e.cause(),
             Kind::Hyper(ref e) => e.cause(),
+            Kind::Mime(ref e) => e.cause(),
             Kind::Url(ref e) => e.cause(),
             Kind::Tls(ref e) => e.cause(),
             Kind::Io(ref e) => e.cause(),
@@ -253,9 +257,10 @@ impl StdError for Error {
 // pub(crate)
 
 #[derive(Debug)]
-pub enum Kind {
+pub(crate) enum Kind {
     Http(::http::Error),
     Hyper(::hyper::Error),
+    Mime(::mime::FromStrError),
     Url(::url::ParseError),
     Tls(::native_tls::Error),
     Io(io::Error),
@@ -279,9 +284,14 @@ impl From<::http::Error> for Kind {
 impl From<::hyper::Error> for Kind {
     #[inline]
     fn from(err: ::hyper::Error) -> Kind {
-        match err {
-            other => Kind::Hyper(other),
-        }
+        Kind::Hyper(err)
+    }
+}
+
+impl From<::mime::FromStrError> for Kind {
+    #[inline]
+    fn from(err: ::mime::FromStrError) -> Kind {
+        Kind::Mime(err)
     }
 }
 
@@ -339,10 +349,8 @@ fn io_timeout() -> io::Error {
     io::Error::new(io::ErrorKind::TimedOut, "timed out")
 }
 
-// pub(crate)
-
 #[allow(missing_debug_implementations)]
-pub struct InternalFrom<T>(pub T, pub Option<Url>);
+pub(crate) struct InternalFrom<T>(pub T, pub Option<Url>);
 
 #[doc(hidden)] // https://github.com/rust-lang/rust/issues/42323
 impl From<InternalFrom<Error>> for Error {
@@ -366,16 +374,14 @@ where
     }
 }
 
-#[inline]
-pub fn from<T>(err: T) -> Error
+pub(crate) fn from<T>(err: T) -> Error
 where
     T: Into<Kind>,
 {
     InternalFrom(err, None).into()
 }
 
-#[inline]
-pub fn into_io(e: Error) -> io::Error {
+pub(crate) fn into_io(e: Error) -> io::Error {
     match e.kind {
         Kind::Io(io) => io,
         _ => io::Error::new(io::ErrorKind::Other, e),
@@ -402,40 +408,35 @@ macro_rules! try_ {
     )
 }
 
-#[inline]
-pub fn loop_detected(url: Url) -> Error {
+pub(crate) fn loop_detected(url: Url) -> Error {
     Error {
         kind: Kind::RedirectLoop,
         url: Some(url),
     }
 }
 
-#[inline]
-pub fn too_many_redirects(url: Url) -> Error {
+pub(crate) fn too_many_redirects(url: Url) -> Error {
     Error {
         kind: Kind::TooManyRedirects,
         url: Some(url),
     }
 }
 
-#[inline]
-pub fn timedout(url: Option<Url>) -> Error {
+pub(crate) fn timedout(url: Option<Url>) -> Error {
     Error {
         kind: Kind::Io(io_timeout()),
         url: url,
     }
 }
 
-#[inline]
-pub fn client_error(url: Url, status: StatusCode) -> Error {
+pub(crate) fn client_error(url: Url, status: StatusCode) -> Error {
     Error {
         kind: Kind::ClientError(status),
         url: Some(url),
     }
 }
 
-#[inline]
-pub fn server_error(url: Url, status: StatusCode) -> Error {
+pub(crate) fn server_error(url: Url, status: StatusCode) -> Error {
     Error {
         kind: Kind::ServerError(status),
         url: Some(url),
